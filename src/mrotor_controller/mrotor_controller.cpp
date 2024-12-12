@@ -65,16 +65,10 @@ mrotorCtrl::mrotorCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &nh_priv
     nh_private_.param<double>("Kv_x", Kvel_x_, 5.0);
     nh_private_.param<double>("Kv_y", Kvel_y_, 5.0);
     nh_private_.param<double>("Kv_z", Kvel_z_, 10.0);    
-    nh_private_.param<double>("Ka_x", Kpos_x_, 0.0);
-    nh_private_.param<double>("Ka_y", Kpos_y_, 0.0);
-    nh_private_.param<double>("Ka_z", Kpos_z_, 0.0);
-    nh_private_.param<double>("Kj_x", Kvel_x_, 0.0);
-    nh_private_.param<double>("Kj_y", Kvel_y_, 0.0);
-    nh_private_.param<double>("Kj_z", Kvel_z_, 0.0); 
     // Reference
     nh_private_.param<double>("c_x", c_x_, 0.0);
     nh_private_.param<double>("c_y", c_y_, 0.0);
-    nh_private_.param<double>("c_z", c_z_, 0.0);    
+    nh_private_.param<double>("c_z", c_z_, 1.0);    
     nh_private_.param<double>("r_x", r_x_, 0.0);
     nh_private_.param<double>("r_y", r_y_, 0.0);    
     nh_private_.param<double>("r_z", r_z_, 0.0);  

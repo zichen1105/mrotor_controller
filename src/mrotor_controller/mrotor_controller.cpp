@@ -64,7 +64,13 @@ mrotorCtrl::mrotorCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &nh_priv
     nh_private_.param<double>("Kp_z", Kpos_z_, 20.0);
     nh_private_.param<double>("Kv_x", Kvel_x_, 5.0);
     nh_private_.param<double>("Kv_y", Kvel_y_, 5.0);
-    nh_private_.param<double>("Kv_z", Kvel_z_, 10.0);    
+    nh_private_.param<double>("Kv_z", Kvel_z_, 10.0);
+    nh_private_.param<double>("Ka_x", Kpos_x_, 0.0);
+    nh_private_.param<double>("Ka_y", Kpos_y_, 0.0);
+    nh_private_.param<double>("Ka_z", Kpos_z_, 0.0);
+    nh_private_.param<double>("Kj_x", Kvel_x_, 0.0);
+    nh_private_.param<double>("Kj_y", Kvel_y_, 0.0);
+    nh_private_.param<double>("Kj_z", Kvel_z_, 0.0);     
     // Reference
     nh_private_.param<double>("c_x", c_x_, 0.0);
     nh_private_.param<double>("c_y", c_y_, 0.0);
@@ -150,23 +156,16 @@ void mrotorCtrl::gazeboLinkStateCb(const gazebo_msgs::LinkStates::ConstPtr& msg)
 
         /* Read Gazebo Link States*/
         if(!finite_diff_enabled_) {
-
             mavPos_ = toEigen(msg -> pose[drone_link_index_].position);
             mavVel_ = toEigen(msg -> twist[drone_link_index_].linear);
-
         }
 
         
 
         else {
-
             diff_t_ = ros::Time::now().toSec() - gazebo_last_called_.toSec(); 
-
             gazebo_last_called_ = ros::Time::now();
-
             mavPos_ = toEigen(msg -> pose[drone_link_index_].position);
-
-            
             if(diff_t_ > 0) {
                 mavVel_ = (mavPos_ - mavPos_prev_) / diff_t_;
             }

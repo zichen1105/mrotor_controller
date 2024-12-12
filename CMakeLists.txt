@@ -132,8 +132,8 @@ include_directories(
 
 ## Declare a C++ library
 add_library(${PROJECT_NAME}
-  src/${PROJECT_NAME}/mrotor_controller.cpp
-  src/${PROJECT_NAME}/nonlinear_attitude_control.cpp
+  src/mrotor_controller/mrotor_controller.cpp
+  src/mrotor_controller/nonlinear_attitude_control.cpp
 )
 
 

@@ -1,4 +1,4 @@
-# Multi-Rotor Drone Slung Load System (SLS) Controller
+# Multi-Rotor Drone Geometric Controller
 
-Quasi-static feedback (QSF) linearization controller for a multi-rotor drone carrying a payload through cable.
+
 

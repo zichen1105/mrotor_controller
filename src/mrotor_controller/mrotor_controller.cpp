@@ -56,7 +56,7 @@ mrotorCtrl::mrotorCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &nh_priv
     nh_private_.param<double>("attctrl_tau", attctrl_tau, 0.3);
     // throttle normalization
     nh_private_.param<double>("max_thrust_force", max_thrust_force_, 31.894746920044025);
-    nh_private_.param<double>("normalized_thrust_constant", norm_thrust_const_, 0.05);
+    nh_private_.param<double>("normalized_thrust_constant", norm_thrust_const_, 0.05055);
     nh_private_.param<double>("normalized_thrust_offset",norm_thrust_offset_, 0.0); // -0.0335
     // Controller Gains
     nh_private_.param<double>("Kp_x", Kpos_x_, 10.0);
@@ -65,12 +65,12 @@ mrotorCtrl::mrotorCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &nh_priv
     nh_private_.param<double>("Kv_x", Kvel_x_, 5.0);
     nh_private_.param<double>("Kv_y", Kvel_y_, 5.0);
     nh_private_.param<double>("Kv_z", Kvel_z_, 10.0);
-    nh_private_.param<double>("Ka_x", Kpos_x_, 0.0);
-    nh_private_.param<double>("Ka_y", Kpos_y_, 0.0);
-    nh_private_.param<double>("Ka_z", Kpos_z_, 0.0);
-    nh_private_.param<double>("Kj_x", Kvel_x_, 0.0);
-    nh_private_.param<double>("Kj_y", Kvel_y_, 0.0);
-    nh_private_.param<double>("Kj_z", Kvel_z_, 0.0);     
+    nh_private_.param<double>("Ka_x", Kacc_x_, 0.0);
+    nh_private_.param<double>("Ka_y", Kacc_y_, 0.0);
+    nh_private_.param<double>("Ka_z", Kacc_z_, 0.0);
+    nh_private_.param<double>("Kj_x", Kjer_x_, 0.0);
+    nh_private_.param<double>("Kj_y", Kjer_y_, 0.0);
+    nh_private_.param<double>("Kj_z", Kjer_z_, 0.0);     
     // Reference
     nh_private_.param<double>("c_x", c_x_, 0.0);
     nh_private_.param<double>("c_y", c_y_, 0.0);
@@ -227,106 +227,106 @@ void mrotorCtrl::dynamicReconfigureCb(mrotor_controller::MrotorControllerConfig 
     /* Max Acceleration*/
     else if (max_fb_acc_ != config.max_acc) {
         max_fb_acc_ = config.max_acc;
-        ROS_INFO("Reconfigure request : max_acc = %.2f ", config.max_acc);
+        ROS_INFO("Reconfigure request : max_acc = %.3f ", config.max_acc);
     }
 
     // // Causes large delay!
     // /* Attitude Control */
     // else if (attctrl_tau_ != config.attctrl_tau) {
     //     attctrl_tau_ = config.attctrl_tau;
-    //     ROS_INFO("Reconfigure request : attctrl_tau = %.2f ", config.attctrl_tau);
+    //     ROS_INFO("Reconfigure request : attctrl_tau = %.3f ", config.attctrl_tau);
     // } 
 
     /* Thrust */
     else if(norm_thrust_const_ != config.normalized_thrust_constant) {
         norm_thrust_const_ = config.normalized_thrust_constant;
-        ROS_INFO("Reconfigure request : normalized_thrust_constant = %.2f ", norm_thrust_const_);
+        ROS_INFO("Reconfigure request : normalized_thrust_constant = %.3f ", norm_thrust_const_);
     }
     else if(norm_thrust_offset_ != config.normalized_thrust_offset) {
         norm_thrust_offset_ = config.normalized_thrust_offset;
-        ROS_INFO("Reconfigure request : normalized_thrust_offset = %.2f ", norm_thrust_offset_);
+        ROS_INFO("Reconfigure request : normalized_thrust_offset = %.3f ", norm_thrust_offset_);
     }
 
     /* Gains */
     // Position
     else if(Kpos_x_ != config.Kp_x) {
         Kpos_x_ = config.Kp_x;
-        ROS_INFO("Reconfigure request : Kp_x = %.2f ", Kpos_x_);
+        ROS_INFO("Reconfigure request : Kp_x = %.3f ", Kpos_x_);
     }
     else if(Kpos_y_ != config.Kp_y) {
         Kpos_y_ = config.Kp_y;
-        ROS_INFO("Reconfigure request : Kp_y = %.2f ", Kpos_y_);
+        ROS_INFO("Reconfigure request : Kp_y = %.3f ", Kpos_y_);
     }
     else if(Kpos_z_ != config.Kp_z) {
         Kpos_z_ = config.Kp_z;
-        ROS_INFO("Reconfigure request : Kp_z = %.2f ", Kpos_z_);
+        ROS_INFO("Reconfigure request : Kp_z = %.3f ", Kpos_z_);
     }
     // Velocity
     else if(Kvel_x_ != config.Kv_x) {
         Kvel_x_ = config.Kv_x;
-        ROS_INFO("Reconfigure request : Kv_x = %.2f ", Kvel_x_);
+        ROS_INFO("Reconfigure request : Kv_x = %.3f ", Kvel_x_);
     }
     else if(Kvel_y_ != config.Kv_y) {
         Kvel_y_ = config.Kv_y;
-        ROS_INFO("Reconfigure request : Kv_y = %.2f ", Kvel_y_);
+        ROS_INFO("Reconfigure request : Kv_y = %.3f ", Kvel_y_);
     }
     else if(Kvel_z_ != config.Kv_z) {
         Kvel_z_ = config.Kv_z;
-        ROS_INFO("Reconfigure request : Kv_z = %.2f ", Kvel_z_);
+        ROS_INFO("Reconfigure request : Kv_z = %.3f ", Kvel_z_);
     }
 
     /* References */
     // center
     else if(c_x_ != config.c_x) {
         c_x_ = config.c_x;
-        ROS_INFO("Reconfigure request : c_x = %.2f ", c_x_);
+        ROS_INFO("Reconfigure request : c_x = %.3f ", c_x_);
     }
     else if(c_x_ != config.c_y) {
         c_y_ = config.c_y;
-        ROS_INFO("Reconfigure request : c_y = %.2f ", c_y_);
+        ROS_INFO("Reconfigure request : c_y = %.3f ", c_y_);
     }
     else if(c_z_ != config.c_z) {
         c_z_ = config.c_z;
-        ROS_INFO("Reconfigure request : c_z = %.2f ", c_z_);
+        ROS_INFO("Reconfigure request : c_z = %.3f ", c_z_);
     }
     // radium
     else if(r_x_ != config.r_x) {
         r_x_ = config.r_x;
-        ROS_INFO("Reconfigure request : r_x = %.2f ", r_x_);
+        ROS_INFO("Reconfigure request : r_x = %.3f ", r_x_);
     }
     else if(r_y_ != config.r_y) {
         r_y_ = config.r_y;
-        ROS_INFO("Reconfigure request : r_y = %.2f ", r_y_);
+        ROS_INFO("Reconfigure request : r_y = %.3f ", r_y_);
     }
     else if(r_z_ != config.r_z) {
         r_z_ = config.r_z;
-        ROS_INFO("Reconfigure request : r_z = %.2f ", r_z_);
+        ROS_INFO("Reconfigure request : r_z = %.3f ", r_z_);
     }
     // frequency
     else if(fr_x_ != config.fr_x) {
         fr_x_ = config.fr_x;
-        ROS_INFO("Reconfigure request : fr_x = %.2f ", fr_x_);
+        ROS_INFO("Reconfigure request : fr_x = %.3f ", fr_x_);
     }
     else if(fr_y_ != config.fr_y) {
         fr_y_ = config.fr_y;
-        ROS_INFO("Reconfigure request : fr_y = %.2f ", fr_y_);
+        ROS_INFO("Reconfigure request : fr_y = %.3f ", fr_y_);
     }
     else if(fr_z_ != config.fr_z) {
         fr_z_ = config.fr_z;
-        ROS_INFO("Reconfigure request : fr_z = %.2f ", fr_z_);
+        ROS_INFO("Reconfigure request : fr_z = %.3f ", fr_z_);
     }
     // phase shift
     else if(ph_x_ != config.ph_x) {
         ph_x_ = config.ph_x;
-        ROS_INFO("Reconfigure request : ph_x = %.2f ", ph_x_);
+        ROS_INFO("Reconfigure request : ph_x = %.3f ", ph_x_);
     }
     else if(ph_y_ != config.ph_y) {
         ph_y_ = config.ph_y;
-        ROS_INFO("Reconfigure request : ph_y = %.2f ", ph_y_);
+        ROS_INFO("Reconfigure request : ph_y = %.3f ", ph_y_);
     }
     else if(ph_z_ != config.ph_z) {
         ph_z_ = config.ph_z;
-        ROS_INFO("Reconfigure request : ph_z = %.2f ", ph_z_);
+        ROS_INFO("Reconfigure request : ph_z = %.3f ", ph_z_);
     }
 
     Kpos_ << -Kpos_x_, -Kpos_y_, -Kpos_z_;

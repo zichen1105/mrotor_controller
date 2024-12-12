@@ -1,8 +1,5 @@
-#include "mrotor_sls_controller/mrotor_sls_controller.hpp"
-#include "mrotor_sls_controller/nonlinear_attitude_control.h"
-#include "mrotor_sls_controller/StabController.h"
-#include "mrotor_sls_controller/TracController.h"
-#include "mrotor_sls_controller/QSFGeometricController.h"
+#include "mrotor_controller/mrotor_controller.hpp"
+#include "mrotor_controller/nonlinear_attitude_control.h"
 
 mrotorCtrl::mrotorCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private): nh_(nh), nh_private_(nh_private) {
     /* Retrieve vehicle total numbers & id */
@@ -62,12 +59,12 @@ mrotorCtrl::mrotorCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &nh_priv
     nh_private_.param<double>("normalized_thrust_constant", norm_thrust_const_, 0.05);
     nh_private_.param<double>("normalized_thrust_offset",norm_thrust_offset_, 0.0); // -0.0335
     // Controller Gains
-    nh_private_.param<double>("Kp_x", Kpos_x_, 8.0);
-    nh_private_.param<double>("Kp_y", Kpos_y_, 8.0);
-    nh_private_.param<double>("Kp_z", Kpos_z_, 10.0);
-    nh_private_.param<double>("Kv_x", Kvel_x_, 1.5);
-    nh_private_.param<double>("Kv_y", Kvel_y_, 1.5);
-    nh_private_.param<double>("Kv_z", Kvel_z_, 3.3);    
+    nh_private_.param<double>("Kp_x", Kpos_x_, 10.0);
+    nh_private_.param<double>("Kp_y", Kpos_y_, 10.0);
+    nh_private_.param<double>("Kp_z", Kpos_z_, 20.0);
+    nh_private_.param<double>("Kv_x", Kvel_x_, 5.0);
+    nh_private_.param<double>("Kv_y", Kvel_y_, 5.0);
+    nh_private_.param<double>("Kv_z", Kvel_z_, 10.0);    
     nh_private_.param<double>("Ka_x", Kpos_x_, 0.0);
     nh_private_.param<double>("Ka_y", Kpos_y_, 0.0);
     nh_private_.param<double>("Ka_z", Kpos_z_, 0.0);
@@ -111,7 +108,7 @@ mrotorCtrl::mrotorCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &nh_priv
     targetJerk_ = Eigen::Vector3d::Zero(); // Not used so just set it to zero
 
     controller_ = std::make_shared<NonlinearAttitudeControl>(attctrl_tau);
-    // ROS_INFO_STREAM(controller_);
+    ROS_INFO_STREAM(controller_);
 
     /* Initialization Successful Message */
     ROS_INFO_STREAM("[mrotorCtrl] Initialization Complete");
@@ -156,20 +153,31 @@ void mrotorCtrl::gazeboLinkStateCb(const gazebo_msgs::LinkStates::ConstPtr& msg)
     }
 
     if(gazebo_link_name_matched_) {
+
         /* Read Gazebo Link States*/
         if(!finite_diff_enabled_) {
+
             mavPos_ = toEigen(msg -> pose[drone_link_index_].position);
             mavVel_ = toEigen(msg -> twist[drone_link_index_].linear);
+
         }
 
+        
+
         else {
+
             diff_t_ = ros::Time::now().toSec() - gazebo_last_called_.toSec(); 
+
             gazebo_last_called_ = ros::Time::now();
+
             mavPos_ = toEigen(msg -> pose[drone_link_index_].position);
+
+            
             if(diff_t_ > 0) {
                 mavVel_ = (mavPos_ - mavPos_prev_) / diff_t_;
             }
             mavPos_prev_ = mavPos_;
+            
         }
 
         mavAtt_(0) = msg -> pose[drone_link_index_].orientation.w;
@@ -201,7 +209,7 @@ void mrotorCtrl::viconCb(const geometry_msgs::TransformStamped::ConstPtr& msg) {
     exeControl();
 }
 
-void mrotorCtrl::dynamicReconfigureCb(mrotor_sls_controller::MrotorSlsControllerConfig &config, uint32_t level) {
+void mrotorCtrl::dynamicReconfigureCb(mrotor_controller::MrotorControllerConfig &config, uint32_t level) {
     /* Switches */
     if(ctrl_enabled_ != config.ctrl_enabled) {
         ctrl_enabled_ = config.ctrl_enabled;
@@ -531,340 +539,4 @@ void mrotorCtrl::exeControl() {
         }
         updateReference();
     }
-}
-
-
-/*================================================================= SLS Controller =================================================================*/
-
-mrotorSlsCtrl::mrotorSlsCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private): mrotorCtrl(nh, nh_private) {
-    // ROS_INFO_STREAM(gravity_acc_);
-
-    /* Subscribers */
-    gazebo_link_state_sub_ = nh_.subscribe<gazebo_msgs::LinkStates>("/gazebo/link_states", 1000, &mrotorSlsCtrl::gazeboLinkStateCb, this, ros::TransportHints().tcpNoDelay());
-    switch(mav_id_) {
-        case 1:
-            vicon_sub_ = nh_.subscribe<geometry_msgs::TransformStamped> ("/vicon/px4vision_1/px4vision_1", 1000, &mrotorSlsCtrl::viconCb, this, ros::TransportHints().tcpNoDelay()); 
-            break;
-        case 2:
-            vicon_sub_ = nh_.subscribe<geometry_msgs::TransformStamped> ("/vicon/px4vision_2/px4vision_2", 1000, &mrotorSlsCtrl::viconCb, this, ros::TransportHints().tcpNoDelay()); 
-            break;
-        default: 
-            break;
-    }
-    vicon_load_sub_ = nh_.subscribe<geometry_msgs::TransformStamped> ("/vicon/load_1/load_1", 1000, &mrotorSlsCtrl::viconLoadCb, this, ros::TransportHints().tcpNoDelay()); 
-
-    /* Publishers */
-    sls_state_pub_ = nh_.advertise<mrotor_sls_controller::SlsState> ("mrotor_sls_controller/sls_state", 10);
-    
-    nh_private_.param<double>("cable_length", cable_length_, 0.85);
-    nh_private_.param<double>("load_mass", load_mass_, 0.25);
-    nh_private_.param<double>("Kp_x", Kpos_x_, 24.0);
-    nh_private_.param<double>("Kp_y", Kpos_y_, 24.0);
-    nh_private_.param<double>("Kp_z", Kpos_z_, 2.0);
-    nh_private_.param<double>("Kv_x", Kvel_x_, 50.0);
-    nh_private_.param<double>("Kv_y", Kvel_y_, 50.0);
-    nh_private_.param<double>("Kv_z", Kvel_z_, 3.0); 
-
-    last_stage_ = ros::Time::now();
-}
-
-mrotorSlsCtrl::~mrotorSlsCtrl(){
-    // Destructor 
-}
-
-void mrotorSlsCtrl::gazeboLinkStateCb(const gazebo_msgs::LinkStates::ConstPtr& msg){
-    // ROS_INFO_STREAM("SLS gazebo");
-    diff_t_ = ros::Time::now().toSec() - gazebo_last_called_.toSec(); 
-    gazebo_last_called_ = ros::Time::now();
-    /* Read Gazebo Link States*/
-    // Drone
-    mavPos_ = toEigen(msg -> pose[2].position);
-    mavVel_ = toEigen(msg -> twist[2].linear);
-    mavAtt_(0) = msg -> pose[2].orientation.w;
-    mavAtt_(1) = msg -> pose[2].orientation.x;
-    mavAtt_(2) = msg -> pose[2].orientation.y;
-    mavAtt_(3) = msg -> pose[2].orientation.z;    
-    mavRate_ = toEigen(msg -> twist[2].angular);
-    // Load 
-    loadPos_ = toEigen(msg -> pose[10].position);
-    loadVel_ = toEigen(msg -> twist[10].linear);
-    // Pendulum
-    computePendState();
-
-
-    if(qsf_geo_ctrl_enabled_) {
-        sls_state_.header.stamp = ros::Time::now();
-        sls_state_.sls_geo_state[0] = mavPos_(0);
-        sls_state_.sls_geo_state[1] = -mavPos_(1);
-        sls_state_.sls_geo_state[2] = -mavPos_(2);
-        sls_state_.sls_geo_state[3] = pendAngle_q_(0);
-        sls_state_.sls_geo_state[4] = -pendAngle_q_(1);
-        sls_state_.sls_geo_state[5] = -pendAngle_q_(2);
-        sls_state_.sls_geo_state[6] = mavVel_(0);
-        sls_state_.sls_geo_state[7] = -mavVel_(1);
-        sls_state_.sls_geo_state[8] = -mavVel_(2); 
-        sls_state_.sls_geo_state[9] = pendRate_q_(0);
-        sls_state_.sls_geo_state[10] = -pendRate_q_(1);
-        sls_state_.sls_geo_state[11] = -pendRate_q_(2);
-
-    }
-
-    else if(!qsf_geo_ctrl_enabled_) {
-        sls_state_.header.stamp = ros::Time::now();
-        sls_state_.sls_state[0] = mavPos_(0);
-        sls_state_.sls_state[1] = -mavPos_(1);
-        sls_state_.sls_state[2] = -mavPos_(2);
-        sls_state_.sls_state[3] = pendAngle_(0);
-        sls_state_.sls_state[4] = pendAngle_(1);
-        sls_state_.sls_state[5] = mavVel_(0);
-        sls_state_.sls_state[6] = -mavVel_(1);
-        sls_state_.sls_state[7] = -mavVel_(2);   
-        sls_state_.sls_state[8] = pendRate_(0);
-        sls_state_.sls_state[9] = pendRate_(1); 
-        sls_state_pub_.publish(sls_state_);        
-    }
-
-    
-    /* Publish Control Commands*/
-    exeSlsControl();
-
-    // exeMission();
-}
-
-void mrotorSlsCtrl::computePendState() {
-    if(!qsf_geo_ctrl_enabled_)  {
-        double Lx = loadPos_(0) - mavPos_(0) ;
-        double Ly = -loadPos_(1) - (-mavPos_(1));
-        double Lz = -loadPos_(2) - (-mavPos_(2));
-        pendAngle_ = ToPendAngles(Lx, Ly, -Lz); // in the paper the definition of n3 are opposite to the Z axis of gazebo
-        if(std::isnan(pendAngle_(0)) || std::isnan(pendAngle_(1))) {
-            pendAngle_ = pendAngle_last_;
-        }
-        else {
-            pendAngle_last_ = pendAngle_;
-        }
-        // gamma beta
-        pendRate_(1) = ((loadVel_(0)) - (mavVel_(0))) / (cable_length_ * std::cos(pendAngle_(1)));
-        // gamma alpha
-        pendRate_(0) =  ((-loadVel_(1)) - (-mavVel_(1)) - std::sin(pendAngle_(0))*std::sin(pendAngle_(1))*pendRate_(1)*cable_length_)/(-std::cos(pendAngle_(0))*std::cos(pendAngle_(1))*cable_length_);
-        if(std::isnan(pendRate_(0)) || std::isnan(pendRate_(1))) {
-            pendRate_ = pendRate_last_;
-        }
-        else {
-            pendRate_last_ = pendRate_;
-        }
-    }
-
-    else if(qsf_geo_ctrl_enabled_) {
-        pendAngle_q_ = loadPos_ - mavPos_;
-        pendRate_q_ = (pendAngle_q_ - pendAngle_q_prev_) / diff_t_;
-        pendAngle_q_prev_ = pendAngle_q_;
-    }
-
-}
-
-Eigen::Vector2d mrotorSlsCtrl::ToPendAngles(double Lx,double Ly,double Lz) { //x=base.x
-    Eigen::Vector2d  angle;
-
-    /* beta (y-axis rotation) */ 
-    double sinbeta = Lx / cable_length_;
-    double cosbeta = Lz / (cable_length_*std::cos(angle(0)));
-    angle(1) = std::asin(sinbeta);
-
-    /* alpha (x-axis rotation) */ 
-    double cosa_cosb = Lz / cable_length_;
-    double sina_cosb = Ly / -cable_length_;
-    angle(0) = std::asin(sina_cosb/std::cos(angle(1)));
-
-    return angle;
-}
-
-Eigen::Vector3d mrotorSlsCtrl::applyQuasiSlsCtrl(double target_pose_x, double target_pose_y, double target_pose_z) {
-    // double K[12] = {2.2361,    3.1623, 3.1623,   3.0777,    8.4827,    8.4827,  0,    18.7962,    18.7962,  0,    17.4399,    17.4399};
-    double K[12] = {Kvel_z_,    3.1623, 3.1623,   Kpos_z_,    8.4827,    8.4827,  0,    18.7962,    18.7962,  0,    17.4399,    17.4399};
-    // double K[12] = {17.4399, 17.4399, 3.077, 18.7962, 18.7962, 2.2361, 8.4827, 8.4827, 0,  3.1623, 3.1623, 0};
-    // double K[12] = {3.0777,    5.4399,    5.4399,    2.2361,    9.7962,    9.7962,         0,    8.4827,    8.4827,         0,    3.1623,    3.1623};
-    double target_force_ned[3];
-    double target_pose_ned[3] = {target_pose_x, target_pose_y, target_pose_z};
-    double param[4] = {mav_mass_, load_mass_, cable_length_, gravity_acc_};
-    double sls_state_array[10];
-    for(int i=0; i<10;i++){
-       sls_state_array[i] = sls_state_.sls_state[i];
-    } 
-    StabController(sls_state_array, K, param, target_pose_ned, target_force_ned);
-    Eigen::Vector3d a_des;
-    a_des(0) = target_force_ned[0] / mav_mass_;
-    a_des(1) = -target_force_ned[1] / mav_mass_;
-    a_des(2) = -target_force_ned[2] / mav_mass_;
-    
-    return a_des;
-}
-
-Eigen::Vector3d mrotorSlsCtrl::applyQuasiSlsTrackingCtrl() {
-    double K[12] = {Kvel_z_,    3.1623, 3.1623,   Kpos_z_,    8.4827,    8.4827,  0,    18.7962,    18.7962,  0,    17.4399,    17.4399};
-    // double K[12] = {2.2361,    3.1623, 3.1623,   3.0777,    8.4827,    8.4827,  0,    18.7962,    18.7962,  0,    17.4399,    17.4399};
-    // double K[12] = {17.4399, 17.4399, 3.077, 18.7962, 18.7962, 2.2361, 8.4827, 8.4827, 0,  3.1623, 3.1623, 0};
-    // double K[12] = {3.0777,    5.4399,    5.4399,    2.2361,    9.7962,    9.7962,         0,    8.4827,    8.4827,         0,    3.1623,    3.1623};
-    double target_force_ned[3];
-    double param[4] = {mav_mass_, load_mass_, cable_length_, gravity_acc_};
-    double sls_state_array[10];
-    for(int i=0; i<10;i++){
-       sls_state_array[i] = sls_state_.sls_state[i];
-    } 
-    const double t = ros::Time::now().toSec() - last_stage_.toSec();
-    TracController(sls_state_array, K, param, t, target_force_ned);
-    Eigen::Vector3d a_des;
-    a_des(0) = target_force_ned[0] / mav_mass_;
-    a_des(1) = -target_force_ned[1] / mav_mass_;
-    a_des(2) = -target_force_ned[2] / mav_mass_;
-    
-    return a_des;
-}
-
-Eigen::Vector3d mrotorSlsCtrl::applyQuasiSlsGeoCtrl() {
-    double target_force_ned[3];
-    double K[10] = {Kpos_x_, Kvel_x_, Kacc_x_, Kjer_x_, Kpos_y_, Kvel_y_, Kacc_y_, Kacc_z_, Kpos_z_, Kvel_z_};
-    double param[4] = {load_mass_, mav_mass_, cable_length_, gravity_acc_};
-    double ref[12] = {r_x_, c_x_, fr_x_, ph_x_, r_y_, c_y_, fr_y_, ph_y_, r_z_, c_z_, fr_z_, ph_z_,};
-    double sls_state_array[12];
-    for(int i=0; i<12;i++){
-       sls_state_array[i] = sls_state_.sls_geo_state[i];
-    }
-    const double t = ros::Time::now().toSec() - last_stage_.toSec();
-    QSFGeometricController(sls_state_array, K, param, ref, t, target_force_ned);
-    Eigen::Vector3d a_des;
-    a_des(0) = target_force_ned[0] / mav_mass_;
-    a_des(1) = -target_force_ned[1] / mav_mass_;
-    a_des(2) = -target_force_ned[2] / mav_mass_;
-    
-    return a_des;
-}
-
-void mrotorSlsCtrl::exeMission(void) {
-    if(init_complete_){
-        Eigen::Vector3d desired_acc;
-        switch(stage){
-            case 0:
-                desired_acc = applyQuasiSlsCtrl(0, 0, -0.4);
-                if(ros::Time::now().toSec() - last_stage_.toSec() >= 10){
-                    stage += 1;
-                    last_stage_ = ros::Time::now();
-                    ROS_INFO_STREAM("case 0 completed!");
-                }
-                break;
-            case 1:
-                desired_acc = applyQuasiSlsCtrl(0, 0, -0.4);
-                if(ros::Time::now().toSec() - last_stage_.toSec() >= 10){
-                    stage += 1;
-                    last_stage_ = ros::Time::now();
-                    ROS_INFO_STREAM("case 1 completed!");
-                }
-                break;
-            case 2:
-                desired_acc = applyQuasiSlsCtrl(1.0, 0.5, -0.6);
-                if(ros::Time::now().toSec() - last_stage_.toSec() >= 10){
-                    stage += 1;
-                    last_stage_ = ros::Time::now();
-                    ROS_INFO_STREAM("case 2 completed!");
-                }
-                break;
-            case 3:
-                desired_acc = applyQuasiSlsCtrl(-1.0, 0.0, -0.3);
-                if(ros::Time::now().toSec() - last_stage_.toSec() >= 10){
-                    stage += 1;
-                    last_stage_ = ros::Time::now();
-                    ROS_INFO_STREAM("case 3 completed!");
-                }
-                break;
-            case 4:
-                desired_acc = applyQuasiSlsCtrl(0.0, 0.0, -0.3);
-                if(ros::Time::now().toSec() - last_stage_.toSec() >= 10){
-                    stage += 1;
-                    last_stage_ = ros::Time::now();
-                    ROS_INFO_STREAM("case 4 completed!");
-                }
-                break;
-            case 5:
-                desired_acc = applyQuasiSlsTrackingCtrl();
-                if(ros::Time::now().toSec() - last_stage_.toSec() >= 32){
-                    stage += 1;
-                    last_stage_ = ros::Time::now();
-                    ROS_INFO_STREAM("case 5 completed!");
-                }
-                break;
-            default: 
-                desired_acc = applyQuasiSlsCtrl(0, 0, -0.4);
-                break;
-        }
-        
-        computeBodyRateCmd(cmdBodyRate_, desired_acc);
-        pubRateCommands(cmdBodyRate_, q_des);
-    }
-}
-
-void mrotorSlsCtrl::exeSlsControl() {
-    if(init_complete_){
-        
-        Eigen::Vector3d desired_acc;
-        if(qsf_geo_ctrl_enabled_) {
-            
-        }
-
-        else if(!traj_tracking_enabled_) {
-            desired_acc = applyQuasiSlsCtrl(0, 0, -0.4);
-        }
-
-        else {
-            desired_acc = applyQuasiSlsTrackingCtrl();
-        }
-        
-        computeBodyRateCmd(cmdBodyRate_, desired_acc);
-
-        if(ctrl_enabled_){
-            pubRateCommands(cmdBodyRate_, q_des);
-        }
-        else{
-            pubTargetPose(pos_x_0_, pos_y_0_, pos_z_0_);
-            debugRateCommands(cmdBodyRate_, q_des);
-        }
-    }
-}
-
-void mrotorSlsCtrl::viconCb(const geometry_msgs::TransformStamped::ConstPtr& msg){
-    diff_t_ = ros::Time::now().toSec() - vicon_last_called_.toSec(); 
-    vicon_last_called_ = ros::Time::now();
-    mavPos_ = toEigen(msg -> transform.translation);
-    if(diff_t_ > 0) {
-        mavVel_ = (mavPos_ - mavPos_prev_) / diff_t_;
-        loadVel_ = (loadPos_ - loadPos_prev_) / diff_t_;
-    }
-    mavPos_prev_ = mavPos_;
-    loadPos_prev_ = loadPos_;
-
-    // MAV Attitude
-    mavAtt_(0) = msg -> transform.rotation.w;
-    mavAtt_(1) = msg -> transform.rotation.x;
-    mavAtt_(2) = msg -> transform.rotation.y;
-    mavAtt_(3) = msg -> transform.rotation.z;    
-
-    sls_state_.header.stamp = ros::Time::now();
-    sls_state_.sls_state[0] = mavPos_(0);
-    sls_state_.sls_state[1] = -mavPos_(1);
-    sls_state_.sls_state[2] = -mavPos_(2);
-    sls_state_.sls_state[3] = pendAngle_(0);
-    sls_state_.sls_state[4] = pendAngle_(1);
-    sls_state_.sls_state[5] = mavVel_(0);
-    sls_state_.sls_state[6] = -mavVel_(1);
-    sls_state_.sls_state[7] = -mavVel_(2);   
-    sls_state_.sls_state[8] = pendRate_(0);
-    sls_state_.sls_state[9] = pendRate_(1); 
-    sls_state_pub_.publish(sls_state_);
-    
-    /* Publish Control Commands*/
-    exeSlsControl();
-}
-
-void mrotorSlsCtrl::viconLoadCb(const geometry_msgs::TransformStamped::ConstPtr& msg){
-    // Load 
-    loadPos_ = toEigen(msg -> transform.translation);
 }

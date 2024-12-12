@@ -8,13 +8,13 @@
         <arg name="rate_ctrl_enabled" default="true"/>
         <arg name="traj_tracking_enabled" default="false"/>
         <arg name="finite_diff_enabled" default="true"/>
-        <arg name="mav_num" value="2"/>
+        <arg name="mav_num" value="1"/>
         <arg name="pos_x_0" default="0.0"/>
-        <arg name="pos_y_0" default="1.5"/>
+        <arg name="pos_y_0" default="0.0"/>
         <arg name="pos_z_0" default="1.0"/>
         <arg name="tracking_exit_min_error" default="0.5"/>
 
-        <node pkg="mrotor_sls_controller" type="node" name="mrotor_sls_controller" output="screen">
+        <node pkg="mrotor_controller" type="node" name="mrotor_controller" output="screen">
             <param name="mav_num" type="int" value="$(arg mav_num)" />
             <param name="mav_id" type="int" value="$(arg mav_id)" />
             <param name="mav_name" type="string" value="$(arg mav_name)" />
